@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Painting Analysis — Scroll Story (v2)</title>
+<style>
+  :root{
+    --bg:#0b0b0c;--ink:#e9eaec;--muted:#9aa0a6;--accent:#c0c6ff;--card:#141417;
+    --gap:clamp(16px,2vw,28px);--radius:18px;--speed:700ms;--easing:cubic-bezier(.2,.7,0,1);--maxw:1200px;
+  }
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif}
+  header{max-width:var(--maxw);margin:0 auto;padding:28px var(--gap)}
+  header h1{margin:0 0 8px;font-weight:700;font-size:clamp(22px,3vw,34px)}
+  header p{margin:0;color:var(--muted)}
+  .scrolly{max-width:var(--maxw);margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:var(--gap);padding:0 var(--gap) var(--gap)}
+  .figure-wrap{position:sticky;top:0;height:100svh;background:linear-gradient(180deg,#101014,#0c0c0f);border-radius:var(--radius);overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.45)}
+  .stage{position:relative;width:100%;height:100%;overflow:hidden}
+  #painting{position:absolute;inset:0;margin:auto;max-width:none;will-change:transform;transition:transform var(--speed) var(--easing);image-rendering:auto}
+  .steps{display:grid;gap:var(--gap);margin-block:var(--gap)}
+  .step{
+    background:var(--card);
+    border:1px solid #1f2024;
+    border-radius:var(--radius);
+    padding:clamp(18px,2.5vw,26px);
+    box-shadow:0 6px 24px rgba(0,0,0,.35);
+    min-height:clamp(320px, 45vh, 70vh); /* ensure each step gets a chance to enter activation zone */
+    display:flex; flex-direction:column; justify-content:center;
+  }
+  .step h2{margin:0 0 6px;font-size:clamp(18px,2.2vw,22px)}
+  .step p{margin:.4em 0 0;color:#cdd1d6}
+  .step small{color:var(--muted)}
+  .step[aria-current="true"]{outline:2px solid var(--accent);box-shadow:0 8px 30px rgba(82,92,255,.25)}
+  .progress{position:fixed;bottom:14px;right:14px;background:#111217cc;color:var(--muted);padding:8px 12px;border-radius:999px;font-size:12px;backdrop-filter:blur(6px);border:1px solid #23242a;user-select:none}
+  @media (min-width:980px){.scrolly{grid-template-columns:minmax(0,52%) minmax(0,48%);align-items:start}.figure-wrap{grid-column:1/2}.steps{grid-column:2/3}}
+  @media (prefers-reduced-motion:reduce){#painting{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>William Bouguereau — Guided Look</h1>
+  <p>Scroll to read; the image pans &amp; zooms to each detail automatically.</p>
+</header>
+
+<main class="scrolly">
+  <div class="figure-wrap">
+    <div class="stage" id="stage">
+      <img id="painting"
+           src="https://photos.smugmug.com/photos/i-2CK6q8N/0/O/i-2CK6q8N.jpg"
+           alt="William Bouguereau painting (SmugMug i-2CK6q8N)" loading="eager" />
+    </div>
+  </div>
+
+  <section class="steps" id="steps">
+    <article class="step" data-x="50" data-y="50" data-zoom="1.1">
+      <h2>First glance: overall design</h2>
+      <p>Take in the whole composition—figure placement, light, and the balance of masses. We’ll step closer next.</p>
+      <small>Zoom 1.1× · Center 50% / 50%</small>
+    </article>
+
+    <article class="step" data-x="35" data-y="32" data-zoom="2.2">
+      <h2>Faces: narrative focus</h2>
+      <p>Watch how edges soften across the cheeks and sharpen toward the eyes, concentrating attention and emotion.</p>
+      <small>Zoom 2.2× · Center 35% / 32%</small>
+    </article>
+
+    <article class="step" data-x="52" data-y="66" data-zoom="2.0">
+      <h2>Hands: structure & touch</h2>
+      <p>Highlights describe bone and tendon with restraint; half-tones do the heavy lifting to model form.</p>
+      <small>Zoom 2.0× · Center 52% / 66%</small>
+    </article>
+
+    <article class="step" data-x="70" data-y="58" data-zoom="2.4">
+      <h2>Drapery: rhythm of folds</h2>
+      <p>Alternating crisp and lost edges create a musical flow, guiding your eye along the garment.</p>
+      <small>Zoom 2.4× · Center 70% / 58%</small>
+    </article>
+
+    <article class="step" data-x="12" data-y="80" data-zoom="1.6">
+      <h2>Background: air & depth</h2>
+      <p>Lower contrast and softened detail push the space back, giving the figures room to breathe.</p>
+      <small>Zoom 1.6× · Center 12% / 80%</small>
+    </article>
+
+    <article class="step" data-x="50" data-y="50" data-zoom="1.0">
+      <h2>Integrate the parts</h2>
+      <p>Step back to see how faces, hands, and fabric resolve into one statement—technique serving feeling.</p>
+      <small>Zoom 1.0× · Center 50% / 50%</small>
+    </article>
+  </section>
+</main>
+
+<div class="progress" id="progress">1 / 6</div>
+
+<script>
+(function(){
+  const img = document.getElementById('painting');
+  const stage = document.getElementById('stage');
+  const steps = Array.from(document.querySelectorAll('.step'));
+  const progress = document.getElementById('progress');
+
+  let natural = { w: 0, h: 0 };
+  let layout = null;
+
+  function getDisplayedImageRect(){
+    const s = stage.getBoundingClientRect();
+    const sw = s.width, sh = s.height;
+    const iw = natural.w, ih = natural.h;
+    if (!iw || !ih) return { left:0, top:0, width: sw, height: sh, stageW:sw, stageH:sh };
+    const stageAR = sw/sh, imgAR = iw/ih;
+    let dispW, dispH, left, top;
+    if (imgAR > stageAR){ dispW = sw; dispH = sw/imgAR; left = 0; top = (sh-dispH)/2; }
+    else { dispH = sh; dispW = sh*imgAR; top = 0; left = (sw-dispW)/2; }
+    return { left, top, width: dispW, height: dispH, stageW: sw, stageH: sh };
+  }
+
+  function applyView(xPct, yPct, zoom, animate=true){
+    if (!layout) layout = getDisplayedImageRect();
+    const { left, top, width, height, stageW, stageH } = layout;
+    const px = left + (xPct/100) * width;
+    const py = top  + (yPct/100) * height;
+    const cx = stageW / 2, cy = stageH / 2;
+    const tx = (cx - px) / zoom, ty = (cy - py) / zoom;
+    if (!animate) img.style.transition = 'none';
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+    if (!animate){ img.getBoundingClientRect(); img.style.transition = ''; }
+  }
+
+  // Use a narrow activation band in the middle of the viewport so only one step is "active" at a time.
+  const io = new IntersectionObserver((entries)=>{
+    // Choose the entry closest to the vertical center
+    let best = null, bestDist = Infinity;
+    const center = window.innerHeight / 2;
+    for (const entry of entries){
+      if (!entry.isIntersecting) continue;
+      const rect = entry.target.getBoundingClientRect();
+      const dist = Math.abs((rect.top + rect.bottom)/2 - center);
+      if (dist < bestDist){ best = entry.target; bestDist = dist; }
+    }
+    if (best){
+      steps.forEach(s=>s.removeAttribute('aria-current'));
+      best.setAttribute('aria-current','true');
+      const i = steps.indexOf(best);
+      progress.textContent = `${i+1} / ${steps.length}`;
+      const x = parseFloat(best.dataset.x||'50');
+      const y = parseFloat(best.dataset.y||'50');
+      const z = parseFloat(best.dataset.zoom||'1');
+      applyView(x,y,z,true);
+    }
+  }, { root: null, rootMargin: '-40% 0px -40% 0px', threshold: 0 });
+
+  function onResize(){
+    layout = getDisplayedImageRect();
+    const current = document.querySelector('.step[aria-current="true"]') || steps[0];
+    applyView(parseFloat(current.dataset.x||'50'),
+              parseFloat(current.dataset.y||'50'),
+              parseFloat(current.dataset.zoom||'1'),
+              false);
+  }
+
+  function boot(){
+    natural.w = img.naturalWidth; natural.h = img.naturalHeight;
+    layout = getDisplayedImageRect();
+    img.style.width = layout.width+'px'; img.style.height = layout.height+'px';
+    img.style.left = layout.left+'px';   img.style.top    = layout.top+'px';
+
+    steps.forEach((s,idx)=>{
+      io.observe(s);
+      if (idx===0) s.setAttribute('aria-current','true');
+    });
+    // initial view
+    const first = steps[0];
+    applyView(parseFloat(first.dataset.x||'50'),
+              parseFloat(first.dataset.y||'50'),
+              parseFloat(first.dataset.zoom||'1'),
+              false);
+    addEventListener('resize', onResize);
+  }
+
+  if (img.complete) boot(); else img.addEventListener('load', boot, { once:true });
+
+  // Helper: click to log focal % for quick tuning.
+  stage.addEventListener('click',(e)=>{
+    const r = stage.getBoundingClientRect();
+    const l = getDisplayedImageRect();
+    const x = (e.clientX - (r.left + l.left)) / l.width * 100;
+    const y = (e.clientY - (r.top  + l.top )) / l.height* 100;
+    if (x>=0 && x<=100 && y>=0 && y<=100) console.log(`Focal ≈ x:${x.toFixed(1)}%, y:${y.toFixed(1)}%`);
+  });
+})();
+</script>
+</body>
+</html>
